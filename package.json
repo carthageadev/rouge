@@ -4,10 +4,14 @@
   "description": "Rouge — a visual, alive clipboard manager. Copied things follow your cursor; a notch keeps the history.",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "node -e \"delete process.env.ELECTRON_RUN_AS_NODE;require('child_process').spawn(require('electron'),['.'],{stdio:'inherit'})\""
   },
   "license": "MIT",
   "devDependencies": {
     "electron": "^44.4.5"
+  },
+  "dependencies": {
+    "pixi-live2d-display-lipsyncpatch": "^0.5.0-ls-8",
+    "pixi.js": "^7.4.2"
   }
 }
