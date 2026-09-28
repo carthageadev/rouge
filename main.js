@@ -163,6 +163,49 @@ function shakeOff() {
   sendTrail();
 }
 
+let menuOpen = false;
+function openMenu() {
+  if (menuOpen) return closeMenu();
+  if (!history.length) return;
+  const p = screen.getCursorScreenPoint();
+  const wa = screen.getDisplayNearestPoint(p).workArea;
+  const h = 460;
+  menu.setBounds({
+    x: Math.round(clamp(p.x + 10, wa.x + 8, wa.x + wa.width - MENU_W - 8)),
+    y: Math.round(clamp(p.y + 10, wa.y + 8, wa.y + wa.height - h - 8)),
+    width: MENU_W, height: h,
+  });
+  menu.webContents.send('open', { items: history.slice(0, 40).map(withIcon), current: currentId });
+  menu.showInactive();
+  menuOpen = true;
+  hsend('keys 1');
+}
+function closeMenu() {
+  if (!menuOpen) return;
+  menuOpen = false;
+  hsend('keys 0');
+  menu.webContents.send('close');
+  setTimeout(() => { if (!menuOpen) menu.hide(); }, 170);
+}
+async function pasteItem(item) {
+  closeMenu();
+  if (!item) return;
+  if (await writeItem(item)) setTimeout(() => hsend('paste'), 60);
+}
+function onMenuKey(vk) {
+  if (!menuOpen) return;
+  if (vk === 0x26) menu.webContents.send('move', -1);
+  else if (vk === 0x28) menu.webContents.send('move', 1);
+  else if (vk === 0x0D) menu.webContents.send('enter');
+  else if (vk === 0x1B) closeMenu();
+  else if (vk >= 0x31 && vk <= 0x39) pasteItem(history[vk - 0x31]);
+}
+function onGlobalClick(x, y) {
+  if (!menuOpen) return;
+  const d = screen.screenToDipPoint({ x, y }), b = menu.getBounds();
+  if (d.x < b.x || d.x > b.x + b.width || d.y < b.y || d.y > b.y + b.height) closeMenu();
+}
+
 function overlayRect(d) {
   return { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height };
 }
@@ -244,6 +287,7 @@ app.whenReady().then(async () => {
   lastSig = now?.sig ?? null;
   currentId = history.find(h => h.sig === lastSig)?.id ?? null;
   createWindows();
+  globalShortcut.register('Alt+V', openMenu);
   setInterval(pollClipboard, 350);
   setInterval(tick, 16);
 });
