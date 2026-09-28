@@ -163,6 +163,27 @@ function shakeOff() {
   sendTrail();
 }
 
+const scrub = { active: false, sel: 0, wT: null, endT: null };
+function onAltWheel(delta) {
+  if (!history.length || menuOpen) return;
+  if (!scrub.active) { scrub.active = true; scrub.sel = Math.max(0, history.findIndex(h => h.id === currentId)); }
+  scrub.sel = clamp(scrub.sel + (delta < 0 ? 1 : -1), 0, history.length - 1);
+  const sel = scrub.sel, item = history[sel];
+  const from = Math.max(0, sel - 4);
+  overlay.webContents.send('scrub', {
+    sel, total: history.length,
+    items: history.slice(from, sel + 5).map((it, k) => ({ ...withIcon(it), idx: from + k })),
+  });
+  clearTimeout(scrub.wT);
+  scrub.wT = setTimeout(() => writeItem(item, false), 90);
+  clearTimeout(scrub.endT);
+  scrub.endT = setTimeout(() => {
+    scrub.active = false;
+    overlay.webContents.send('scrub', null);
+    if (settings.trail) { pushTrail(item.id); sendTrail(); }
+  }, 1100);
+}
+
 let menuOpen = false;
 function openMenu() {
   if (menuOpen) return closeMenu();
