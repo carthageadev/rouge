@@ -117,6 +117,25 @@ async function pollClipboard() {
   } catch {} finally { polling = false; }
 }
 
+async function writeItem(item, promote = true) {
+  polling = true;
+  try {
+    if (item.kind === 'image') {
+      const png = fs.readFileSync(path.join(IMG_DIR, item.id + '.png'));
+      await clipboard.write([new ClipboardItem({ 'image/png': new Blob([png], { type: 'image/png' }) })]);
+    } else await clipboard.writeText(item.text);
+    lastSig = (await readClip())?.sig ?? lastSig;
+  } catch { return false; } finally { polling = false; }
+  currentId = item.id;
+  if (promote) {
+    history = [item, ...history.filter(h => h !== item)];
+    item.ts = Date.now();
+    save();
+  }
+  broadcast();
+  return true;
+}
+
 function sendTrail() {
   overlay?.webContents.send('trail', trail.map(byId).filter(Boolean).map(withIcon));
 }
