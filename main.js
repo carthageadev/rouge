@@ -117,6 +117,33 @@ async function pollClipboard() {
   } catch {} finally { polling = false; }
 }
 
+function sendTrail() {
+  overlay?.webContents.send('trail', trail.map(byId).filter(Boolean).map(withIcon));
+}
+function broadcast(extra = {}) {
+  notch?.webContents.send('state', {
+    history: history.map(withIcon), pouch: pouch.map(byId).filter(Boolean).map(withIcon), current: currentId, ...extra,
+  });
+  sendTrail();
+}
+
+function pushTrail(id) {
+  trail = [id, ...trail.filter(x => x !== id)].slice(0, MAX_TRAIL);
+  trailAt.set(id, Date.now());
+}
+function expireTrail() {
+  const now = Date.now();
+  const kept = trail.filter(id => now - (trailAt.get(id) || 0) < settings.ttl * 1000);
+  if (kept.length !== trail.length) { trail = kept; sendTrail(); }
+}
+
+function shakeOff() {
+  if (!trail.length) return;
+  overlay.webContents.send('shake');
+  trail = [];
+  sendTrail();
+}
+
 function overlayRect(d) {
   return { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height };
 }
@@ -150,6 +177,25 @@ function createWindows() {
   notch.webContents.on('did-finish-load', () => computeLayout());
 }
 
+let tickN = 0;
+function tick() {
+  if (!overlay || !notch) return;
+  const p = screen.getCursorScreenPoint();
+
+  const d = screen.getDisplayNearestPoint(p);
+  let jump = false;
+  if (d.id !== overlayDisplay.id) {
+    overlayDisplay = d;
+    overlay.setBounds(overlayRect(d));
+    jump = true;
+  }
+  const ob = overlayRect(overlayDisplay);
+  overlay.webContents.send('cursor', { x: p.x - ob.x, y: p.y - ob.y, jump });
+
+  if (++tickN % 15 === 0) expireTrail();
+
+}
+
 ipcMain.on('copy', (_e, id) => { const it = byId(id); if (it) writeItem(it); });
 ipcMain.on('menu-pick', (_e, id) => pasteItem(byId(id)));
 ipcMain.on('menu-height', (_e, h) => {
@@ -180,6 +226,7 @@ app.whenReady().then(async () => {
   currentId = history.find(h => h.sig === lastSig)?.id ?? null;
   createWindows();
   setInterval(pollClipboard, 350);
+  setInterval(tick, 16);
 });
 
 app.on('window-all-closed', e => e.preventDefault());
