@@ -163,6 +163,30 @@ function shakeOff() {
   sendTrail();
 }
 
+const shake = { x: { dir: 0, seg: 0, rev: [] }, y: { dir: 0, seg: 0, rev: [] } };
+let prevP = null, lastShake = 0;
+function detectShake(p) {
+  const now = Date.now();
+  let hit = false;
+  if (prevP) for (const ax of ['x', 'y']) {
+    const s = shake[ax], d = p[ax] - prevP[ax], sg = Math.sign(d);
+    if (sg && sg !== s.dir) {
+      if (s.seg > 45) s.rev.push(now);
+      s.dir = sg; s.seg = 0;
+    }
+    s.seg += Math.abs(d);
+    s.rev = s.rev.filter(t => now - t < 750);
+    if (s.rev.length >= 4) hit = true;
+  }
+  prevP = p;
+  if (hit && now - lastShake > 900) {
+    lastShake = now;
+    shake.x.rev = []; shake.y.rev = [];
+    return true;
+  }
+  return false;
+}
+
 const scrub = { active: false, sel: 0, wT: null, endT: null };
 function onAltWheel(delta) {
   if (!history.length || menuOpen) return;
@@ -275,6 +299,7 @@ function tick() {
   const ob = overlayRect(overlayDisplay);
   overlay.webContents.send('cursor', { x: p.x - ob.x, y: p.y - ob.y, jump });
 
+  if (detectShake(p)) shakeOff();
   if (++tickN % 15 === 0) expireTrail();
 
 }
@@ -308,6 +333,7 @@ app.whenReady().then(async () => {
   lastSig = now?.sig ?? null;
   currentId = history.find(h => h.sig === lastSig)?.id ?? null;
   createWindows();
+  globalShortcut.register('CommandOrControl+Shift+X', shakeOff);
   globalShortcut.register('Alt+V', openMenu);
   setInterval(pollClipboard, 350);
   setInterval(tick, 16);
