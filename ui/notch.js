@@ -56,6 +56,61 @@ function pickForm(k) {
 }
 $('forms').addEventListener('click', e => { const o = e.target.closest('[data-form]'); if (o) pickForm(o.dataset.form); });
 
+const cust = $('cust');
+let custTab = 'Hair', custSaveT;
+const myCustom = () => ({ ...((settings.custom || {})[mascot.form] || {}) });
+function saveCustom(c) {
+  settings.custom = { ...(settings.custom || {}), [mascot.form]: c };
+  mascot.setCustom(c);
+  renderCustom();
+  clearTimeout(custSaveT);
+  custSaveT = setTimeout(() => rouge.send('settings-set', { custom: settings.custom }), 250);
+}
+function renderCustom() {
+  const f = mascot.form, c = myCustom();
+  $('custTitle').textContent = `Customize ${Mascot.FORMS[f].name}`;
+  const tabs = [...Mascot.CUSTOM.map(s => s.section), 'Outfit', 'Colours'];
+  $('custTabs').innerHTML = tabs.map(t => `<div class="${t === custTab ? 'on' : ''}" data-tab="${t}">${t}</div>`).join('');
+  let html = '';
+  const sec = Mascot.CUSTOM.find(s => s.section === custTab);
+  if (sec) {
+    html = sec.items.map(item => {
+      const v = Mascot.valueOf(f, c, item);
+      return `<div class="c-row"><div class="c-lbl">${item.label}</div><div class="c-opts">${item.options.map(([val, lbl]) =>
+        `<div class="c-opt${val === v ? ' on' : ''}" data-k="${item.key}" data-v="${val}">${lbl}</div>`).join('')}</div></div>`;
+    }).join('');
+  } else if (custTab === 'Outfit') {
+    const cur = Mascot.look(f, c, 'outfit');
+    html = `<div class="c-row"><div class="c-lbl">Outfit</div><div class="c-opts">${Object.entries(Mascot.OUTFITS).map(([k, o]) => {
+      const skirt = o.skirt ? `rgb(${o.skirt.map(x => Math.round(x * 255)).join(',')})` : '#9a9aa6';
+      return `<div class="c-fit${k === cur ? ' on' : ''}" data-k="outfit" data-v="${k}"><i style="background:${o.swatch};--skirt:${skirt}"></i>${o.label}</div>`;
+    }).join('')}</div></div>`;
+  } else {
+    const sw = (key, label, set) => {
+      const cur = Mascot.look(f, c, key);
+      return `<div class="c-row"><div class="c-lbl">${label}</div><div class="c-opts">${Object.entries(set).map(([k, o]) =>
+        `<div class="c-sw${k === cur ? ' on' : ''}" data-k="${key}" data-v="${k}"><i style="background:${o.swatch}"></i>${o.label}</div>`).join('')}</div></div>`;
+    };
+    html = sw('hair', 'Hair colour', Mascot.HAIR_COLORS) + sw('eye', 'Eye colour', Mascot.EYE_COLORS) + sw('skin', 'Skin', Mascot.SKIN_TONES);
+  }
+  $('custBody').innerHTML = html;
+}
+$('mascot').addEventListener('contextmenu', e => {
+  e.preventDefault();
+  renderCustom();
+  cust.classList.add('on');
+});
+$('custTabs').addEventListener('click', e => { const t = e.target.closest('[data-tab]'); if (t) { custTab = t.dataset.tab; renderCustom(); } });
+$('custBody').addEventListener('click', e => {
+  const o = e.target.closest('[data-k]');
+  if (!o) return;
+  const v = o.dataset.v, c = myCustom();
+  c[o.dataset.k] = /^-?\d+$/.test(v) ? +v : v;
+  saveCustom(c);
+});
+$('custReset').onclick = () => saveCustom({});
+$('custClose').onclick = () => cust.classList.remove('on');
+
 function renderMini() {
   const h = state.history;
   $('miniStack').innerHTML = h.length ? h.slice(0, 4).map(i => miniTile(i)).join('') : '<span class="empty">copy something</span>';
@@ -161,9 +216,127 @@ function renderGrid(animate) {
   if (animate) g.scrollTop = 0;
 }
 
+function renderSettings() {
+  document.querySelectorAll('[data-set]').forEach(seg => {
+    seg.querySelectorAll('[data-val]').forEach(d => d.classList.toggle('on', String(settings[seg.dataset.set]) === d.dataset.val));
+  });
+  document.querySelectorAll('[data-toggle]').forEach(t => t.classList.toggle('on', !!settings[t.dataset.toggle]));
+  $('swatches').innerHTML = ACCENTS.map(c => `<div class="sw-dot${c === settings.accent ? ' on' : ''}" data-c="${c}" style="background:${c}"></div>`).join('');
+  document.querySelectorAll('.style-opt').forEach(o => o.classList.toggle('on', o.dataset.style === settings.style));
+  formOptions($('forms'));
+}
+function applySettings(s) {
+  if (!Mascot.FORMS[s.mascot]) { s = { ...s, mascot: 'mo' }; rouge.send('settings-set', { mascot: 'mo' }); }
+  const prevForm = settings.mascot;
+  settings = s;
+  const root = document.documentElement;
+  root.dataset.theme = s.dark ? 'dark' : 'light';
+  root.style.setProperty('--rouge', s.accent);
+  const c = (s.custom || {})[s.mascot];
+  if (mascot.form !== s.mascot) { mascot.setForm(s.mascot, c, open); cust.classList.remove('on'); }
+  else if (!cust.classList.contains('on')) mascot.setForm(s.mascot, c, false);
+  $('brandName').textContent = 'Rouge';
+  renderSettings();
+  renderPouch(false);
+}
+document.querySelectorAll('[data-set]').forEach(seg => seg.addEventListener('click', e => {
+  const d = e.target.closest('[data-val]');
+  if (!d) return;
+  const v = seg.dataset.set === 'ttl' ? +d.dataset.val : d.dataset.val;
+  rouge.send('settings-set', { [seg.dataset.set]: v });
+}));
+document.querySelectorAll('[data-toggle]').forEach(t => t.addEventListener('click', () => rouge.send('settings-set', { [t.dataset.toggle]: !settings[t.dataset.toggle] })));
+$('swatches').addEventListener('click', e => { const d = e.target.closest('[data-c]'); if (d) rouge.send('settings-set', { accent: d.dataset.c }); });
+let hueT;
+$('hue').addEventListener('input', e => {
+  const c = `hsl(${e.target.value} 85% 60%)`;
+  document.documentElement.style.setProperty('--rouge', c);
+  clearTimeout(hueT); hueT = setTimeout(() => rouge.send('settings-set', { accent: c }), 120);
+});
+$('styles').addEventListener('click', e => { const o = e.target.closest('[data-style]'); if (o) rouge.send('settings-set', { style: o.dataset.style }); });
+$('gear').addEventListener('click', () => {
+  const on = !panel.classList.contains('set');
+  panel.classList.toggle('set', on); $('gear').classList.toggle('on', on);
+});
+
+rouge.on('layout', l => {
+  document.body.classList.toggle('float', l.float);
+  document.body.classList.toggle('up', l.dir === 'up');
+  N.style.setProperty('--pcx', l.pcx + 'px');
+});
+
+const grip = $('grip');
+grip.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  grip.setPointerCapture(e.pointerId);
+  document.body.classList.add('dragging');
+  rouge.send('drag-start');
+});
+const endDrag = () => { if (!document.body.classList.contains('dragging')) return; document.body.classList.remove('dragging'); rouge.send('drag-end'); };
+grip.addEventListener('pointerup', endDrag);
+grip.addEventListener('lostpointercapture', endDrag);
+
+rouge.on('settings', applySettings);
+rouge.on('hover', v => {
+  open = v;
+  N.classList.toggle('open', v);
+  if (v) { renderGrid(true); mascot.resume?.(); }
+  else {
+    panel.classList.remove('set'); $('gear').classList.remove('on'); cust.classList.remove('on');
+    setTimeout(() => { if (!open) mascot.pause?.(); }, 700);
+  }
+});
+
+let bumpT;
 rouge.on('state', s => {
   state = s;
-  renderMini(); renderPouch(s.gulp); renderChips(); renderGrid(!s.quiet);
+  if (s.fresh) {
+    freshId = s.fresh;
+    N.classList.add('bump'); clearTimeout(bumpT);
+    bumpT = setTimeout(() => N.classList.remove('bump'), 520);
+  }
+  renderMini();
+  renderPouch(s.gulp);
+  if (open) renderGrid(false); else renderChips();
 });
-rouge.on('open', v => { open = v; document.body.classList.toggle('open', v); renderMini(); });
-rouge.on('filter', f => { filter = f; renderChips(); renderGrid(true); });
+
+$('grid').addEventListener('click', e => {
+  const x = e.target.closest('[data-x]');
+  if (x) { rouge.send('remove', x.dataset.x); return; }
+  const c = e.target.closest('.card, .row');
+  if (!c) return;
+  rouge.send('copy', c.dataset.id);
+  setTimeout(() => {
+    const el = document.querySelector(`[data-id="${c.dataset.id}"]`);
+    if (el) { el.classList.add('copied'); setTimeout(() => el.classList.remove('copied'), 700); }
+  }, 40);
+});
+$('chips').addEventListener('click', e => {
+  const c = e.target.closest('.chip');
+  if (c) { filter = c.dataset.f; renderGrid(true); }
+});
+$('view').addEventListener('click', e => {
+  const d = e.target.closest('[data-v]');
+  if (!d || d.dataset.v === view) return;
+  view = d.dataset.v;
+  try { localStorage.setItem('rouge.view', view); } catch {}
+  renderGrid(true);
+});
+$('carry').onclick = () => { mascot.cheer(); rouge.send('carry'); };
+$('empty').onclick = () => {
+  mascot.toss();
+  setTimeout(() => rouge.send('empty-pouch'), 420);
+};
+let armed = false;
+$('clearAll').onclick = () => {
+  if (!armed) { armed = true; $('total').textContent = 'click again to clear'; setTimeout(() => { armed = false; renderMini(); }, 1800); return; }
+  armed = false; rouge.send('clear');
+};
+
+document.addEventListener('mousemove', e => {
+  const r = $('mascot').getBoundingClientRect();
+  mascot.look(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height * .65));
+});
+
+setInterval(() => { if (open) renderGrid(false); }, 30000);
+renderMini(); renderPouch(false); renderChips(); renderSettings();

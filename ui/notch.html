@@ -328,6 +328,53 @@
       <div class="grid" id="grid"></div>
     </div>
 
+    <div class="cust" id="cust">
+      <div class="cust-head"><b id="custTitle">Customize</b>
+        <div class="acts">
+          <div class="icon-btn" id="custReset" title="Reset to her default look"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg></div>
+          <div class="icon-btn" id="custClose" title="Done"><svg width="13" height="13" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg></div>
+        </div>
+      </div>
+      <div class="cust-tabs" id="custTabs"></div>
+      <div class="cust-body" id="custBody"></div>
+    </div>
+
+    <div class="settings" id="settings">
+      <div class="s-sec">Appearance</div>
+      <div class="s-card">
+        <div class="s-row"><div class="s-lbl">Theme</div>
+          <div class="seg" data-set="theme"><div data-val="dark">Dark</div><div data-val="light">Light</div><div data-val="system">System</div></div></div>
+        <div class="s-row" style="display:block">
+          <div class="s-lbl" style="padding-top:10px">Accent colour<small>Everything that glows uses it</small></div>
+          <div class="swatches" id="swatches"></div>
+          <input type="range" class="hue" id="hue" min="0" max="360" value="354">
+        </div>
+      </div>
+
+      <div class="s-sec">Notch</div>
+      <div class="s-card">
+        <div class="styles" id="styles">
+          <div class="style-opt" data-style="notch"><div class="pv notch"><i></i></div>Notch<br><span style="color:var(--fg-3);font-size:10.5px">Hugs the top edge</span></div>
+          <div class="style-opt" data-style="float"><div class="pv float"><i></i><b></b></div>Floating<br><span style="color:var(--fg-3);font-size:10.5px">Drag it anywhere by its grip</span></div>
+        </div>
+      </div>
+
+      <div class="s-sec">Character</div>
+      <div class="s-card"><div class="forms" id="forms"></div><div class="c-hint">Right-click her in the notch to customise ears, hair, outfit and colours.</div></div>
+
+      <div class="s-sec">Trail</div>
+      <div class="s-card">
+        <div class="s-row"><div class="s-lbl">Copies follow the cursor<small>Shake the mouse to fling them off</small></div><div class="toggle" data-toggle="trail"></div></div>
+        <div class="s-row"><div class="s-lbl">Tiles drift away after</div>
+          <div class="seg" data-set="ttl"><div data-val="15">15s</div><div data-val="30">30s</div><div data-val="60">1m</div><div data-val="300">5m</div></div></div>
+      </div>
+
+      <div class="s-sec">System</div>
+      <div class="s-card">
+        <div class="s-row"><div class="s-lbl">Start with Windows</div><div class="toggle" data-toggle="login"></div></div>
+      </div>
+      <div class="s-foot">Alt V paste menu · Alt + scroll to pick · Ctrl Shift X shake off</div>
+    </div>
   </div>
 </div>
 <script src="glyphs.js"></script>
