@@ -1,0 +1,13 @@
+{
+  "name": "rouge-clipboard",
+  "version": "1.0.0",
+  "description": "Rouge — a visual, alive clipboard manager. Copied things follow your cursor; a notch keeps the history.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^44.4.5"
+  }
+}
