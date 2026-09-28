@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Rouge paste</title>
+<link rel="stylesheet" href="glyphs.css">
+<style>  :root { --rouge: #ff4d5e; --bg: rgba(12,12,14,.97); --fg: rgba(255,255,255,.92); --fg2: rgba(255,255,255,.4); --line: rgba(255,255,255,.08); --sel: rgba(255,255,255,.1); --k: rgba(255,255,255,.1); }
+  :root[data-theme=light] { --bg: rgba(252,252,253,.98); --fg: rgba(0,0,0,.88); --fg2: rgba(0,0,0,.45); --line: rgba(0,0,0,.09); --sel: rgba(0,0,0,.06); --k: rgba(0,0,0,.07); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: transparent; overflow: hidden; user-select: none;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: var(--fg); }
+  #m { margin: 0; border-radius: 16px; background: var(--bg); padding: 8px; transform-origin: 0 0;
+    box-shadow: 0 0 0 1px var(--line) inset; opacity: 0; transform: scale(.95) translateY(-4px);
+    transition: opacity .14s, transform .3s cubic-bezier(.3,1.4,.5,1); }
+  #m.on { opacity: 1; transform: none; }
+  .hd { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px 8px; font-size: 11px; color: var(--fg2); }
+  .hd b { color: var(--fg); font-weight: 600; font-size: 12px; display: flex; align-items: center; gap: 7px; }
+  .hd b i { width: 8px; height: 8px; border-radius: 50%; background: var(--rouge); box-shadow: 0 0 8px var(--rouge); }
+  .k { display: inline-block; padding: 0 4px; border-radius: 4px; background: var(--k); color: var(--fg2); font-size: 10px; line-height: 16px; margin-left: 2px; }
+  #list { max-height: 392px; overflow-y: auto; }
+  #list::-webkit-scrollbar { width: 5px; } #list::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 3px; }
+  .r { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; cursor: pointer; position: relative;
+    animation: in .35s cubic-bezier(.3,1.3,.5,1) backwards; animation-delay: calc(var(--i) * 18ms); }
+  @keyframes in { from { opacity: 0; transform: translateY(-5px); } }
+  .r.sel { background: var(--sel); }
+  .r.sel::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 2px; background: var(--rouge); }
+  .num { width: 16px; font-size: 10.5px; color: var(--fg2); text-align: center; font-variant-numeric: tabular-nums; flex: none; }
+  .f { position: relative; width: 30px; height: 30px; border-radius: 8px; background: #fff; overflow: hidden; display: grid; place-items: center; flex: none; box-shadow: 0 0 0 1px var(--line); }
+  .f img { width: 100%; height: 100%; object-fit: cover; }
+  .f.wide { width: 44px; }
+  .tx { flex: 1; min-width: 0; }
+  .t1 { font-size: 12.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+  .t2 { font-size: 10.5px; color: var(--fg2); display: flex; align-items: center; gap: 5px; margin-top: 2px; white-space: nowrap; overflow: hidden; }
+  .src-ic { width: 12px; height: 12px; object-fit: contain; border-radius: 3px; flex: none; }
+  .on-cb { font-size: 9.5px; padding: 1px 5px; border-radius: 4px; background: color-mix(in srgb, var(--rouge) 18%, transparent); color: var(--rouge); flex: none; }
+</style>
+</head>
+<body>
+<div id="m">
+  <div class="hd"><b><i></i>Paste</b><span><span class="k">↑↓</span> <span class="k">Enter</span> <span class="k">1–9</span> <span class="k">Esc</span></span></div>
+  <div id="list"></div>
+</div>
+<script src="glyphs.js"></script>
+<script>
+  const M = document.getElementById('m'), L = document.getElementById('list');
+  let items = [], sel = 0;
+  const ago = ts => { const s = (Date.now() - ts) / 1000; return s < 45 ? 'now' : s < 3600 ? Math.round(s / 60) + 'm' : s < 86400 ? Math.round(s / 3600) + 'h' : Math.round(s / 86400) + 'd'; };
+
+  function render(current) {
+    L.innerHTML = items.map((it, i) => `
+      <div class="r${i === sel ? ' sel' : ''}" data-i="${i}" style="--i:${Math.min(i, 12)}">
+        <div class="num">${i < 9 ? i + 1 : ''}</div>
+        <div class="f${it.kind === 'image' ? ' wide' : ''}">${Rouge.tile(it)}</div>
+        <div class="tx">
+          <div class="t1">${Rouge.esc(it.kind === 'image' ? Rouge.preview(it) : (it.text || '').slice(0, 220))}</div>
+          <div class="t2">${Rouge.srcIcon(it)}<span>${Rouge.esc(Rouge.srcName(it) || it.kind)}</span><span>· ${ago(it.ts)}</span></div>
+        </div>
+        ${it.id === current ? '<span class="on-cb">on clipboard</span>' : ''}
+      </div>`).join('');
+    requestAnimationFrame(() => rouge.send('menu-height', M.offsetHeight));
+  }
+  function select(i) {
+    sel = Math.max(0, Math.min(items.length - 1, i));
+    L.querySelectorAll('.r').forEach((r, k) => r.classList.toggle('sel', k === sel));
+    L.children[sel]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  rouge.on('open', d => {
+    items = d.items; sel = 0;
+    render(d.current);
+    M.classList.remove('on'); void M.offsetWidth; M.classList.add('on');
+  });
+  rouge.on('close', () => M.classList.remove('on'));
+  rouge.on('settings', st => {
+    document.documentElement.dataset.theme = st.dark ? 'dark' : 'light';
+    document.documentElement.style.setProperty('--rouge', st.accent);
+  });
+  rouge.on('move', dir => select(sel + dir));
+  rouge.on('enter', () => items[sel] && rouge.send('menu-pick', items[sel].id));
+
+  L.addEventListener('mousemove', e => { const r = e.target.closest('.r'); if (r && +r.dataset.i !== sel) select(+r.dataset.i); });
+  L.addEventListener('mousedown', e => { const r = e.target.closest('.r'); if (r) rouge.send('menu-pick', items[+r.dataset.i].id); });
+</script>
+</body>
+</html>
