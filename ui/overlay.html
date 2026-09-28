@@ -1,0 +1,255 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Rouge trail</title>
+<link rel="stylesheet" href="glyphs.css">
+<style>  :root { --rouge: #ff4d5e; --pk-bg: rgba(12,12,14,.93); --pk-fg: #fff; --pk-fg2: rgba(255,255,255,.45); --pk-line: rgba(255,255,255,.07); --pk-sel: rgba(255,255,255,.1); }
+  :root[data-theme=light] { --pk-bg: rgba(252,252,253,.96); --pk-fg: #111; --pk-fg2: rgba(0,0,0,.45); --pk-line: rgba(0,0,0,.08); --pk-sel: rgba(0,0,0,.06); }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; pointer-events: none;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; }
+  .tile { position: absolute; left: 0; top: 0; width: 30px; height: 30px; margin: -15px 0 0 -15px;
+    will-change: transform, opacity; transform: translate(-100px,-100px); }
+  .face { position: absolute; inset: 0; border-radius: 8px; background: #fff; overflow: hidden; display: grid; place-items: center;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.14), 0 8px 18px -6px rgba(0,0,0,.32); }
+  .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .badge { position: absolute; right: -5px; bottom: -5px; width: 15px; height: 15px; border-radius: 5px; background: #fff;
+    display: grid; place-items: center; box-shadow: 0 0 0 1px rgba(0,0,0,.08), 0 2px 5px rgba(0,0,0,.25);
+    animation: badge .45s cubic-bezier(.3,1.5,.5,1) backwards; }
+  .badge img { width: 11px; height: 11px; object-fit: contain; }
+  @keyframes badge { from { transform: scale(0); } }
+  .ripple { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%;
+    border: 1.5px solid var(--rouge); animation: ripple .7s cubic-bezier(.2,.7,.3,1) forwards; }
+  @keyframes ripple { from { transform: scale(.2); opacity: .8; } to { transform: scale(1.9); opacity: 0; } }
+
+  #picker { position: absolute; left: 0; top: 0; width: 300px; height: 244px; opacity: 0; transform: scale(.94);
+    transform-origin: 0 50%; transition: opacity .18s, transform .3s cubic-bezier(.3,1.4,.5,1); }
+  #picker.on { opacity: 1; transform: none; }
+  .pk-panel { position: absolute; inset: 0; border-radius: 18px; background: var(--pk-bg); overflow: hidden;
+    box-shadow: 0 0 0 1px var(--pk-line) inset, 0 24px 50px -16px rgba(0,0,0,.6); }
+  .pk-head { position: absolute; left: 14px; right: 14px; top: 10px; display: flex; justify-content: space-between;
+    font-size: 11px; color: var(--pk-fg2); }
+  .pk-head b { color: var(--pk-fg); font-weight: 600; }
+  .kbd { display: inline-block; padding: 1px 5px; border-radius: 4px; background: var(--rouge); color: #fff; font: 600 10px/1.4 inherit; margin-right: 4px; }
+  .pk-rows { position: absolute; left: 0; right: 0; top: 34px; bottom: 0;
+    -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent); }
+  .pk-row { position: absolute; left: 10px; right: 10px; top: 50%; height: 44px; margin-top: -22px; border-radius: 12px;
+    display: flex; align-items: center; gap: 10px; padding: 0 10px;
+    transition: transform .32s cubic-bezier(.3,1.25,.5,1), opacity .25s, background .2s; }
+  .pk-row.sel { background: var(--pk-sel); box-shadow: inset 3px 0 0 var(--rouge); }
+  .pk-row .pf { position: relative; width: 28px; height: 28px; flex: none; border-radius: 7px; background: #fff; box-shadow: 0 0 0 1px var(--pk-line); overflow: hidden; display: grid; place-items: center; }
+  .pk-row .pf img { width: 100%; height: 100%; object-fit: cover; }
+  .pk-row .tx { min-width: 0; flex: 1; }
+  .pk-row .t1 { font-size: 12.5px; color: var(--pk-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pk-row .t2 { font-size: 10.5px; color: var(--pk-fg2); display: flex; align-items: center; gap: 5px; margin-top: 1px; white-space: nowrap; overflow: hidden; }
+  .src-ic { width: 12px; height: 12px; object-fit: contain; border-radius: 3px; flex: none; }
+  .pk-row .n { font-size: 10px; color: var(--pk-fg2); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="picker"><div class="pk-panel">
+  <div class="pk-head"><span><span class="kbd">Ctrl V</span>will paste</span><span id="pkPos"></span></div>
+  <div class="pk-rows" id="pkRows"></div>
+</div></div>
+<script src="glyphs.js"></script>
+<script>  const items = new Map();
+  let order = [];
+  let cur = { x: -300, y: -300 };
+  let lastMove = 0, last = performance.now();
+
+  const OFFSET = { x: 17, y: 25 };
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+  function body(item) {
+    const el = document.createElement('div');
+    el.className = 'tile';
+    el.innerHTML = `<div class="face">${Rouge.tile(item)}</div>`;
+    document.body.appendChild(el);
+    return { id: item.id, el, x: cur.x + OFFSET.x, y: cur.y + OFFSET.y, vx: 0, vy: 0, rot: 0, s: 0, vs: 0, o: 1, mode: 'trail', t0: 0 };
+  }
+
+  function ripple(x, y) {
+    const r = document.createElement('div');
+    r.className = 'ripple';
+    r.style.left = x + 'px'; r.style.top = y + 'px';
+    document.body.appendChild(r);
+    setTimeout(() => r.remove(), 800);
+  }
+
+  const cvel = { x: 0, y: 0, t: performance.now() };
+  rouge.on('cursor', p => {
+    if (p.jump) for (const it of items.values()) { it.x = p.x + OFFSET.x; it.y = p.y + OFFSET.y; it.vx = it.vy = 0; }
+    const now = performance.now(), dt = Math.max(8, now - cvel.t) / 1000;
+    if (!p.jump) {
+      cvel.x += ((p.x - cur.x) / dt - cvel.x) * .35;
+      cvel.y += ((p.y - cur.y) / dt - cvel.y) * .35;
+    }
+    cvel.t = now;
+    if (p.x !== cur.x || p.y !== cur.y) lastMove = now;
+    cur = { x: p.x, y: p.y };
+  });
+  rouge.on('settings', st => {
+    document.documentElement.dataset.theme = st.dark ? 'dark' : 'light';
+    document.documentElement.style.setProperty('--rouge', st.accent);
+  });
+
+  rouge.on('trail', list => {
+    const ids = list.map(i => i.id);
+    for (const it of items.values()) {
+      if (it.mode === 'trail' && !ids.includes(it.id)) it.mode = 'fade';
+    }
+    list.forEach((item, i) => {
+      const it = items.get(item.id);
+      if (it && it.mode === 'trail') return;
+      if (it) it.el.remove();
+      items.set(item.id, body(item));
+      if (i === 0) { ripple(cur.x + OFFSET.x, cur.y + OFFSET.y); lastMove = performance.now(); }
+    });
+    order = ids;
+  });
+
+  rouge.on('absorb', t => {
+    const now = performance.now();
+    order.forEach((id, i) => {
+      const it = items.get(id);
+      if (it && it.mode === 'trail') Object.assign(it, { mode: 'absorb', t0: now + i * 55, tx: t.x, ty: t.y });
+    });
+    order = [];
+  });
+
+  rouge.on('shake', () => {
+    order.forEach((id, i) => {
+      const it = items.get(id);
+      if (!it || it.mode !== 'trail') return;
+      const fling = .55 + Math.random() * .45;
+      Object.assign(it, {
+        mode: 'thrown',
+        vx: it.vx * .6 + clamp(cvel.x, -2600, 2600) * fling + (Math.random() - .5) * 420,
+        vy: Math.min(it.vy * .4, 0) + clamp(cvel.y, -2200, 1200) * fling * .5 - 380 - Math.random() * 420 - i * 30,
+        spin: (Math.random() - .5) * 900 + clamp(cvel.x, -2000, 2000) * .25,
+        bounces: 0,
+      });
+    });
+    order = [];
+  });
+
+  function spring(it, tx, ty, k, zeta, dt) {
+    const c = 2 * Math.sqrt(k) * zeta;
+    it.vx += (k * (tx - it.x) - c * it.vx) * dt;
+    it.vy += (k * (ty - it.y) - c * it.vy) * dt;
+    it.x += it.vx * dt; it.y += it.vy * dt;
+  }
+  function springScale(it, target, dt) {
+    const k = 320, c = 2 * Math.sqrt(k) * .42;
+    it.vs += (k * (target - it.s) - c * it.vs) * dt;
+    it.s += it.vs * dt;
+  }
+
+  const picker = document.getElementById('picker'), rowsEl = document.getElementById('pkRows');
+  const rows = new Map();
+  const pk = { x: 0, y: 0, on: false, placed: false };
+  rouge.on('scrub', s => {
+    if (!s) { picker.classList.remove('on'); pk.on = false; return; }
+    if (!pk.on) { pk.placed = false; }
+    pk.on = true;
+    picker.classList.add('on');
+    document.getElementById('pkPos').innerHTML = `<b>${s.sel + 1}</b> / ${s.total}`;
+    const seen = new Set();
+    for (const item of s.items) {
+      seen.add(item.id);
+      let r = rows.get(item.id);
+      if (!r) {
+        r = document.createElement('div');
+        r.className = 'pk-row';
+        const d = item.idx - s.sel;
+        r.style.transform = `translateY(${(d + Math.sign(d || 1)) * 44}px)`;
+        r.style.opacity = 0;
+        rowsEl.appendChild(r);
+        rows.set(item.id, r);
+      }
+      const name = Rouge.srcName(item);
+      r.innerHTML = `<div class="pf">${Rouge.tile(item)}</div>
+        <div class="tx"><div class="t1">${Rouge.esc(Rouge.preview(item, 60)) || '&nbsp;'}</div>
+        <div class="t2">${Rouge.srcIcon(item)}${Rouge.esc(name || item.kind)}</div></div>
+        <div class="n">${item.idx + 1}</div>`;
+      const d = item.idx - s.sel;
+      requestAnimationFrame(() => {
+        r.style.transform = `translateY(${d * 44}px) scale(${d === 0 ? 1 : .94})`;
+        r.style.opacity = Math.max(0, 1 - Math.abs(d) * .28);
+      });
+      r.classList.toggle('sel', d === 0);
+    }
+    for (const [id, r] of rows) if (!seen.has(id)) { r.style.opacity = 0; rows.delete(id); setTimeout(() => r.remove(), 300); }
+  });
+
+  function frame(t) {
+    const dt = clamp((t - last) / 1000, 1 / 240, 1 / 30);
+    last = t;
+    const idle = t - lastMove > 3200;
+
+    let px = cur.x + OFFSET.x, py = cur.y + OFFSET.y, dirx = .55, diry = .83;
+    let n = 0;
+    for (const id of order) {
+      const it = items.get(id);
+      if (!it || it.mode !== 'trail') continue;
+      let tx = px, ty = py;
+      if (n > 0) {
+        const gap = idle ? 9 : 24;
+        let dx = it.x - px, dy = it.y - py, d = Math.hypot(dx, dy);
+        if (d < .5) { dx = dirx; dy = diry; d = 1; }
+        dirx = dx / d; diry = dy / d;
+        tx = px + dirx * gap; ty = py + diry * gap;
+      }
+      spring(it, tx, ty, n === 0 ? 420 : Math.max(150, 280 - n * 22), .74, dt);
+      springScale(it, idle ? .86 : 1, dt);
+      it.o += ((idle ? .5 : 1) - it.o) * Math.min(1, dt * 5);
+      it.rot += (clamp(it.vx * .03, -20, 20) + (idle ? n * 4 : 0) - it.rot) * Math.min(1, dt * 9);
+      it.el.style.zIndex = 100 - n;
+      px = it.x; py = it.y; n++;
+    }
+
+    for (const it of items.values()) {
+      if (it.mode === 'absorb') {
+        if (t < it.t0) continue;
+        spring(it, it.tx, it.ty, 240, .8, dt);
+        springScale(it, .5, dt);
+        it.rot += (clamp(it.vx * .05, -40, 40) - it.rot) * Math.min(1, dt * 10);
+        if (Math.hypot(it.tx - it.x, it.ty - it.y) < 22) it.o -= dt * 7;
+      } else if (it.mode === 'thrown') {
+        const W = innerWidth, H = innerHeight;
+        it.vy += 2600 * dt;
+        const drag = Math.exp(-dt * .35);
+        it.vx *= drag; it.vy *= drag;
+        it.x += it.vx * dt; it.y += it.vy * dt;
+        it.rot += it.spin * dt;
+        springScale(it, 1, dt);
+        if (it.x < 15 && it.vx < 0) { it.x = 15; it.vx *= -.55; it.spin *= -.7; }
+        if (it.x > W - 15 && it.vx > 0) { it.x = W - 15; it.vx *= -.55; it.spin *= -.7; }
+        if (it.y < 15 && it.vy < 0) { it.y = 15; it.vy *= -.4; }
+        if (it.y > H + 60) it.o = 0;
+      } else if (it.mode === 'fade') {
+
+        it.vy += (18 - it.vy) * Math.min(1, dt * 3);
+        it.x += it.vx * dt * .2; it.y += it.vy * dt;
+        springScale(it, .7, dt); it.o -= dt * 1.3;
+      }
+      if (it.o <= 0) { it.el.remove(); items.delete(it.id); continue; }
+      it.el.style.transform = `translate(${it.x}px,${it.y}px) rotate(${it.rot}deg) scale(${Math.max(0, it.s)})`;
+      it.el.style.opacity = clamp(it.o, 0, 1);
+    }
+
+    if (pk.on) {
+      const W = innerWidth, H = innerHeight;
+      let tx = cur.x + 26, ty = cur.y - 122;
+      if (tx + 310 > W) tx = cur.x - 326;
+      ty = clamp(ty, 8, H - 252);
+      if (!pk.placed) { pk.x = tx; pk.y = ty; pk.placed = true; }
+      pk.x += (tx - pk.x) * Math.min(1, dt * 14); pk.y += (ty - pk.y) * Math.min(1, dt * 14);
+      picker.style.left = pk.x + 'px'; picker.style.top = pk.y + 'px';
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
