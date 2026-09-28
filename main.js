@@ -175,7 +175,11 @@ app.whenReady().then(async () => {
   IMG_DIR = path.join(app.getPath('userData'), 'images');
   fs.mkdirSync(IMG_DIR, { recursive: true });
   load();
+  const now = await readClip().catch(() => null);
+  lastSig = now?.sig ?? null;
+  currentId = history.find(h => h.sig === lastSig)?.id ?? null;
   createWindows();
+  setInterval(pollClipboard, 350);
 });
 
 app.on('window-all-closed', e => e.preventDefault());
