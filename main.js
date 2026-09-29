@@ -444,7 +444,8 @@ function tick() {
   if (!layout) return;
 
   if (drag) {
-    notch.setPosition(Math.round(p.x - drag.dx), Math.round(p.y - drag.dy));
+    const c = clampPill(p.x - drag.dx + layout.pcx, p.y - drag.dy + layout.pillTop);
+    notch.setPosition(Math.round(c.x - layout.pcx), Math.round(c.y - layout.pillTop));
     setInteractive(true);
     return;
   }
