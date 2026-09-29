@@ -463,6 +463,33 @@ function setInteractive(v) {
   notch.setIgnoreMouseEvents(!v, { forward: true });
 }
 
+function trayIcon() {
+  const s = 16, buf = Buffer.alloc(s * s * 4);
+  for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) {
+    const d = Math.hypot(x - 7.5, y - 7.5), a = Math.max(0, Math.min(1, 6.8 - d));
+    const i = (y * s + x) * 4;
+    buf[i] = 0x5e; buf[i + 1] = 0x4d; buf[i + 2] = 0xff; buf[i + 3] = Math.round(a * 255);
+  }
+  return nativeImage.createFromBitmap(buf, { width: s, height: s });
+}
+
+let buildTrayMenu = null;
+function buildTray() {
+  tray = new Tray(trayIcon());
+  tray.setToolTip('Rouge — clipboard');
+  const menuTpl = () => Menu.buildFromTemplate([
+    { label: 'Trail follows cursor', type: 'checkbox', checked: settings.trail, click: m => applySettings({ trail: m.checked }) },
+    { label: 'Floating pill', type: 'checkbox', checked: settings.style === 'float', click: m => applySettings({ style: m.checked ? 'float' : 'notch' }) },
+    { label: 'Shake off trail   Ctrl+Shift+X', click: shakeOff },
+    { label: 'Paste menu   Alt+V', click: openMenu },
+    { type: 'separator' },
+    { label: 'Clear history', click: () => { history = []; pouch = []; trail = []; save(); broadcast(); } },
+    { label: 'Quit Rouge', click: () => app.exit(0) },
+  ]);
+  tray.setContextMenu(menuTpl());
+  buildTrayMenu = () => tray.setContextMenu(menuTpl());
+}
+
 ipcMain.on('copy', (_e, id) => { const it = byId(id); if (it) writeItem(it); });
 ipcMain.on('menu-pick', (_e, id) => pasteItem(byId(id)));
 ipcMain.on('menu-height', (_e, h) => {
@@ -513,6 +540,7 @@ app.whenReady().then(async () => {
   currentId = history.find(h => h.sig === lastSig)?.id ?? null;
   startHelper();
   createWindows();
+  buildTray();
   globalShortcut.register('CommandOrControl+Shift+X', shakeOff);
   globalShortcut.register('Alt+V', openMenu);
   setInterval(pollClipboard, 350);
@@ -522,3 +550,4 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', e => e.preventDefault());
+app.on('will-quit', () => { quitting = true; globalShortcut.unregisterAll(); helper?.kill(); });
