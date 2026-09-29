@@ -342,6 +342,49 @@ function createWindows() {
   notch.webContents.on('did-finish-load', () => computeLayout());
 }
 
+function clampPill(x, y) {
+  const wa = screen.getDisplayNearestPoint({ x: Math.round(x), y: Math.round(y) }).workArea;
+  return {
+    wa,
+    x: clamp(x, wa.x + PILL_W / 2 + 6, wa.x + wa.width - PILL_W / 2 - 6),
+    y: clamp(y, wa.y + 6, wa.y + wa.height - PILL_H - 6),
+  };
+}
+
+function computeLayout() {
+  if (!notch) return;
+  const float = settings.style === 'float';
+  const primary = screen.getPrimaryDisplay();
+  let wx, wy, dir = 'down', pillTop, pcx;
+  if (!float) {
+    wx = primary.bounds.x + (primary.bounds.width - NOTCH_W) / 2;
+    wy = primary.bounds.y;
+    pillTop = 0; pcx = NOTCH_W / 2;
+  } else {
+    const start = settings.floatPos || { x: primary.workArea.x + primary.workArea.width / 2, y: primary.workArea.y + 18 };
+    const c = clampPill(start.x, start.y);
+    const wa = c.wa, p = { x: c.x, y: c.y };
+    settings.floatPos = p;
+    dir = p.y > wa.y + wa.height / 2 ? 'up' : 'down';
+    const slack = (NOTCH_W - OPEN_W) / 2;
+    wx = clamp(p.x - NOTCH_W / 2, wa.x - slack, wa.x + wa.width - NOTCH_W + slack);
+    wy = dir === 'down' ? p.y - PAD : p.y + PILL_H + PAD - NOTCH_H;
+    pillTop = dir === 'down' ? PAD : NOTCH_H - PAD - PILL_H;
+    pcx = p.x - wx;
+  }
+  const openTop = dir === 'down' ? pillTop : pillTop + PILL_H - OPEN_H;
+  const ox = (NOTCH_W - OPEN_W) / 2;
+  layout = {
+    float, dir, pcx, pillTop, x: Math.round(wx), y: Math.round(wy),
+    body: float ? { x: pcx - PILL_W / 2, y: pillTop, w: PILL_W - 36, h: PILL_H } : { x: (NOTCH_W - 214) / 2, y: 0, w: 214, h: 40 },
+    handle: float ? { x: pcx + PILL_W / 2 - 36, y: pillTop, w: 36, h: PILL_H } : null,
+    open: { x: ox, y: openTop, w: OPEN_W, h: OPEN_H + (float ? 0 : 12) },
+    bag: { x: ox + 72, y: openTop + 100 },
+  };
+  notch.setBounds({ x: layout.x, y: layout.y, width: NOTCH_W, height: NOTCH_H });
+  notch.webContents.send('layout', { float, dir, pcx, pillTop });
+}
+
 let tickN = 0;
 function tick() {
   if (!overlay || !notch) return;
@@ -360,6 +403,30 @@ function tick() {
   if (detectShake(p)) shakeOff();
   if (++tickN % 15 === 0) expireTrail();
 
+  if (!layout) return;
+
+  if (drag) {
+    notch.setPosition(Math.round(p.x - drag.dx), Math.round(p.y - drag.dy));
+    setInteractive(true);
+    return;
+  }
+
+  const nb = notch.getBounds();
+  const inRect = r => r && p.x >= nb.x + r.x && p.x <= nb.x + r.x + r.w && p.y >= nb.y + r.y && p.y <= nb.y + r.y + r.h;
+  const inside = inRect(hover ? layout.open : layout.body);
+  if (inside) {
+    clearTimeout(leaveT); leaveT = null;
+    if (!hover) setHover(true);
+  } else if (hover && !leaveT) {
+    leaveT = setTimeout(() => { leaveT = null; setHover(false); }, 220);
+  }
+  setInteractive(hover || !!inRect(layout.handle));
+}
+
+function setInteractive(v) {
+  if (v === interactive) return;
+  interactive = v;
+  notch.setIgnoreMouseEvents(!v, { forward: true });
 }
 
 ipcMain.on('copy', (_e, id) => { const it = byId(id); if (it) writeItem(it); });
@@ -376,6 +443,19 @@ ipcMain.on('remove', (_e, id) => {
   pouch = pouch.filter(p => p !== id);
   trail = trail.filter(t => t !== id);
   save(); broadcast();
+});
+ipcMain.on('drag-start', () => {
+  if (!layout?.float) return;
+  const p = screen.getCursorScreenPoint(), nb = notch.getBounds();
+  drag = { dx: p.x - nb.x, dy: p.y - nb.y };
+});
+ipcMain.on('drag-end', () => {
+  if (!drag) return;
+  drag = null;
+  const nb = notch.getBounds();
+  settings.floatPos = { x: nb.x + layout.pcx, y: nb.y + layout.pillTop };
+  computeLayout();
+  save();
 });
 ipcMain.on('clear', () => {
   for (const h of history) if (h.kind === 'image') fs.unlink(path.join(IMG_DIR, h.id + '.png'), () => {});
@@ -396,6 +476,7 @@ app.whenReady().then(async () => {
   globalShortcut.register('Alt+V', openMenu);
   setInterval(pollClipboard, 350);
   setInterval(tick, 16);
+  screen.on('display-metrics-changed', () => { computeLayout(); overlayDisplay = { id: -1 }; });
 });
 
 app.on('window-all-closed', e => e.preventDefault());
