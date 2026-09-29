@@ -385,6 +385,40 @@ function computeLayout() {
   notch.webContents.send('layout', { float, dir, pcx, pillTop });
 }
 
+const isDark = () => settings.theme === 'system' ? nativeTheme.shouldUseDarkColors : settings.theme !== 'light';
+function sendSettings() {
+  const payload = { ...settings, dark: isDark() };
+  for (const w of [notch, overlay, menu]) w?.webContents.send('settings', payload);
+}
+function applySettings(patch) {
+  const prev = settings;
+  settings = { ...settings, ...patch };
+  if (patch.style !== undefined && patch.style !== prev.style) computeLayout();
+  if (patch.trail === false) shakeOff();
+  if (patch.login !== undefined) {
+    try { app.setLoginItemSettings({ openAtLogin: !!settings.login, path: process.execPath, args: app.isPackaged ? [] : [app.getAppPath()] }); } catch {}
+  }
+  save();
+  sendSettings();
+  buildTrayMenu?.();
+}
+
+function setHover(v) {
+  hover = v;
+  notch.webContents.send('hover', v);
+  if (v && trail.length) absorb();
+}
+
+function absorb() {
+  const nb = notch.getBounds(), ob = overlay.getBounds();
+  overlay.webContents.send('absorb', { x: nb.x + layout.bag.x - ob.x, y: nb.y + layout.bag.y - ob.y });
+  pouch = [...trail, ...pouch.filter(id => !trail.includes(id))].slice(0, MAX_POUCH);
+  trail = [];
+  sendTrail();
+  save();
+  setTimeout(() => broadcast({ gulp: true }), 420);
+}
+
 let tickN = 0;
 function tick() {
   if (!overlay || !notch) return;
@@ -444,6 +478,7 @@ ipcMain.on('remove', (_e, id) => {
   trail = trail.filter(t => t !== id);
   save(); broadcast();
 });
+ipcMain.on('settings-set', (_e, patch) => applySettings(patch));
 ipcMain.on('drag-start', () => {
   if (!layout?.float) return;
   const p = screen.getCursorScreenPoint(), nb = notch.getBounds();
@@ -456,6 +491,12 @@ ipcMain.on('drag-end', () => {
   settings.floatPos = { x: nb.x + layout.pcx, y: nb.y + layout.pillTop };
   computeLayout();
   save();
+});
+ipcMain.on('empty-pouch', () => { pouch = []; save(); broadcast(); });
+ipcMain.on('carry', () => {
+  for (const id of [...pouch].reverse()) pushTrail(id);
+  pouch = [];
+  save(); broadcast();
 });
 ipcMain.on('clear', () => {
   for (const h of history) if (h.kind === 'image') fs.unlink(path.join(IMG_DIR, h.id + '.png'), () => {});
@@ -477,6 +518,7 @@ app.whenReady().then(async () => {
   setInterval(pollClipboard, 350);
   setInterval(tick, 16);
   screen.on('display-metrics-changed', () => { computeLayout(); overlayDisplay = { id: -1 }; });
+  nativeTheme.on('updated', sendSettings);
 });
 
 app.on('window-all-closed', e => e.preventDefault());
