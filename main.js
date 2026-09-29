@@ -48,9 +48,12 @@ function save() {
 }
 
 let helper = null, helperBuf = '', reqId = 0;
+
+const clog = (...a) => { try { console.error(...a); } catch {} };
 const pending = new Map();
 function startHelper() {
   helper = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'native', 'helper.ps1')], { windowsHide: true });
+  for (const s of [helper.stdin, helper.stdout, helper.stderr]) s.on('error', () => {});
   helper.stdout.setEncoding('utf8');
   helper.stdout.on('data', d => {
     helperBuf += d;
@@ -61,7 +64,7 @@ function startHelper() {
       if (line) onHelper(line);
     }
   });
-  helper.stderr.on('data', d => console.error('[helper]', String(d)));
+  helper.stderr.on('data', d => clog('[helper]', String(d)));
   helper.on('exit', () => { helper = null; if (!quitting) setTimeout(startHelper, 2000); });
 }
 const hsend = cmd => helper?.stdin.write(cmd + '\n');
@@ -81,7 +84,7 @@ function onHelper(line) {
   else if (m.type === 'wheel') onAltWheel(m.delta);
   else if (m.type === 'key') onMenuKey(m.vk);
   else if (m.type === 'click') onGlobalClick(m.x, m.y);
-  else if (m.type === 'error') console.error('[helper]', m.msg);
+  else if (m.type === 'error') clog('[helper]', m.msg);
 }
 
 function classify(text) {
