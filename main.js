@@ -46,6 +46,43 @@ function save() {
   saveT = setTimeout(() => fs.writeFile(STORE, JSON.stringify({ history, pouch, icons, settings }), () => {}), 400);
 }
 
+let helper = null, helperBuf = '', reqId = 0;
+const pending = new Map();
+function startHelper() {
+  helper = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(__dirname, 'native', 'helper.ps1')], { windowsHide: true });
+  helper.stdout.setEncoding('utf8');
+  helper.stdout.on('data', d => {
+    helperBuf += d;
+    let i;
+    while ((i = helperBuf.indexOf('\n')) >= 0) {
+      const line = helperBuf.slice(0, i).trim();
+      helperBuf = helperBuf.slice(i + 1);
+      if (line) onHelper(line);
+    }
+  });
+  helper.stderr.on('data', d => console.error('[helper]', String(d)));
+  helper.on('exit', () => { helper = null; if (!quitting) setTimeout(startHelper, 2000); });
+}
+const hsend = cmd => helper?.stdin.write(cmd + '\n');
+function foreground() {
+  return new Promise(res => {
+    if (!helper) return res(null);
+    const id = ++reqId;
+    pending.set(id, res);
+    hsend('fg ' + id);
+    setTimeout(() => { if (pending.delete(id)) res(null); }, 1500);
+  });
+}
+function onHelper(line) {
+  let m;
+  try { m = JSON.parse(line); } catch { return; }
+  if (m.type === 'fg') { const r = pending.get(m.id); if (r) { pending.delete(m.id); r(m.info); } }
+  else if (m.type === 'wheel') onAltWheel(m.delta);
+  else if (m.type === 'key') onMenuKey(m.vk);
+  else if (m.type === 'click') onGlobalClick(m.x, m.y);
+  else if (m.type === 'error') console.error('[helper]', m.msg);
+}
+
 function classify(text) {
   const t = text.trim();
   if (/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(t) || /^(rgb|hsl)a?\([^)]*\)$/i.test(t)) return 'color';
@@ -73,7 +110,28 @@ async function readClip() {
   return null;
 }
 
-async function captureSource() { return null; }
+async function captureSource() {
+  const fg = await foreground();
+  if (!fg || !fg.exe) return null;
+  if (fg.exe.toLowerCase() === process.execPath.toLowerCase()) return null;
+  const base = path.basename(fg.exe, path.extname(fg.exe));
+  const src = { app: fg.name || base, exe: fg.exe };
+  if (BROWSERS.test(base)) {
+    src.browser = true;
+    let u = (fg.url || '').trim();
+    if (u && !/\s/.test(u)) {
+      if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u = 'https://' + u;
+      try { const U = new URL(u); src.url = U.href; src.site = U.hostname.replace(/^www\./, ''); } catch {}
+    }
+    src.title = fg.title.replace(/\s[-—–]\s[^-—–]*$/, '').trim();
+  } else {
+    src.title = fg.title;
+  }
+  if (!icons[fg.exe]) {
+    try { icons[fg.exe] = (await app.getFileIcon(fg.exe, { size: 'normal' })).toDataURL(); } catch {}
+  }
+  return src;
+}
 
 function addItem(clip) {
   let item = history.find(h => h.sig === clip.sig);
@@ -332,6 +390,7 @@ app.whenReady().then(async () => {
   const now = await readClip().catch(() => null);
   lastSig = now?.sig ?? null;
   currentId = history.find(h => h.sig === lastSig)?.id ?? null;
+  startHelper();
   createWindows();
   globalShortcut.register('CommandOrControl+Shift+X', shakeOff);
   globalShortcut.register('Alt+V', openMenu);
