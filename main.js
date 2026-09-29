@@ -12,6 +12,7 @@ const MAX_POUCH = 12;
 const NOTCH_W = 540, NOTCH_H = 540;
 const PILL_W = 190, PILL_H = 32, OPEN_W = 520, OPEN_H = 510, PAD = 12;
 const MENU_W = 360;
+const TASKBAR_GAP = 4;
 const BROWSERS = /^(chrome|msedge|brave|vivaldi|opera|firefox|arc|thorium|chromium|zen|librewolf|waterfox)$/i;
 
 let STORE, IMG_DIR;
@@ -310,7 +311,8 @@ function onGlobalClick(x, y) {
 }
 
 function overlayRect(d) {
-  return { x: d.bounds.x, y: d.bounds.y, width: d.bounds.width, height: d.bounds.height };
+  const wa = d.workArea;
+  return { x: wa.x, y: wa.y, width: wa.width, height: Math.max(1, wa.height - TASKBAR_GAP) };
 }
 
 function makeWindow(opts, file, show = true) {
@@ -330,6 +332,8 @@ function createWindows() {
   const primary = screen.getPrimaryDisplay();
   overlayDisplay = primary;
   overlay = makeWindow(overlayRect(primary), 'overlay.html');
+
+  overlay.setBounds(overlayRect(primary));
   overlay.setIgnoreMouseEvents(true);
 
   notch = makeWindow({ width: NOTCH_W, height: NOTCH_H, x: 0, y: 0 }, 'notch.html');
