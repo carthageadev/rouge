@@ -25,6 +25,6 @@ History is stored in `%APPDATA%/rouge-clipboard/`.
 
 ## Mascot credit
 
-The mascot is **MO**, a free Live2D model by 樱井檬 ([@Sakurai_mon](https://x.com/Sakurai_mon)), made available free of charge; reselling it is prohibited.
+The mascot is **MO**, a free Live2D model by 樱井檬 ([@Sakurai_mon](https://x.com/Sakurai_mon)), made available free of charge.
 It is rendered with [PixiJS](https://pixijs.com), [pixi-live2d-display-lipsyncpatch](https://github.com/RaSan147/pixi-live2d-display) and the Live2D Cubism Core (`vendor/`, under the [Live2D Proprietary Software License](https://www.live2d.com/eula/live2d-proprietary-software-license-agreement_en.html)).
 Textures in `assets/live2d/MO/tex` are downscaled to 1024px so the notch stays light on memory.
