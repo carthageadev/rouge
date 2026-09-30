@@ -8,6 +8,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "acorn": "^8.18.0",
     "electron": "^44.4.5"
   },
   "dependencies": {
