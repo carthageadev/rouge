@@ -127,7 +127,7 @@ async function captureSource() {
       if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(u)) u = 'https://' + u;
       try { const U = new URL(u); src.url = U.href; src.site = U.hostname.replace(/^www\./, ''); } catch {}
     }
-    src.title = fg.title.replace(/\s[-—–]\s[^-—–]*$/, '').trim();
+    src.title = fg.title.replace(/\s[-\u2014\u2013]\s[^-\u2014\u2013]*$/, '').trim();
   } else {
     src.title = fg.title;
   }
@@ -484,7 +484,7 @@ function trayIcon() {
 let buildTrayMenu = null;
 function buildTray() {
   tray = new Tray(trayIcon());
-  tray.setToolTip('Rouge — clipboard');
+  tray.setToolTip('Rouge - clipboard');
   const menuTpl = () => Menu.buildFromTemplate([
     { label: 'Trail follows cursor', type: 'checkbox', checked: settings.trail, click: m => applySettings({ trail: m.checked }) },
     { label: 'Floating pill', type: 'checkbox', checked: settings.style === 'float', click: m => applySettings({ style: m.checked ? 'float' : 'notch' }) },
